@@ -70,6 +70,18 @@ RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-cu
         --enable res_pjsip_geolocation \
         --enable res_geolocation \
         --enable res_statsd \
+        --enable res_http_websocket \
+        --enable res_ari \
+        --enable res_ari_model \
+        --enable res_ari_bridges \
+        --enable res_ari_channels \
+        --enable res_stasis \
+        --enable res_stasis_device_state \
+        --enable res_stasis_playback \
+        --enable res_stasis_recording \
+        --enable app_stasis \
+        --enable app_externalMedia \
+        --enable bridge_holding \
         --enable chan_pjsip \
         --enable res_rtp_asterisk \
         --enable res_sorcery_config \
