@@ -15,6 +15,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     wget \
+    tini \
+    supervisor \
     libncurses5-dev \
     libssl-dev \
     libxml2-dev \
@@ -32,7 +34,6 @@ RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-in
     && rm -rf /var/lib/apt/lists/*
 
 # Build and Install Asterisk 22 LTS (Minimal PJSIP only)
-# This matches our verified scripts/install-asterisk.sh process.
 WORKDIR /usr/local/src
 RUN rm -rf /usr/lib/asterisk/modules
 RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-current.tar.gz" \
@@ -115,6 +116,9 @@ COPY config/asterisk/*.conf /etc/asterisk/
 # Copy site configuration
 COPY config/oob-sites.conf /etc/oob-sites.conf
 
+# Copy supervisor configuration
+COPY config/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+
 # Copy scripts
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/oob-healthcheck.sh /usr/local/bin/oob-healthcheck.sh
@@ -132,4 +136,5 @@ EXPOSE 22/tcp 5060/udp 10000-10100/udp
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD /usr/local/bin/oob-healthcheck.sh || exit 1
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

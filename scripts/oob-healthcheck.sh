@@ -1,6 +1,6 @@
 #!/bin/bash
 # OOB Console Hub - Health Check
-# Used by: Docker HEALTHCHECK, systemd watchdog timer, manual diagnostics
+# Used by: Docker HEALTHCHECK and manual diagnostics
 #
 # Exit codes:
 #   0 = healthy

@@ -7,9 +7,9 @@ Built with Go using the [Charm](https://charm.sh) ecosystem (Wish + Bubble Tea +
 ## Quick Start
 
 ```bash
-git clone https://github.com/gbm-dev/oob-console-hub.git /opt/oob-console-hub
-cd /opt/oob-console-hub
-sudo bash scripts/host-setup.sh
+git clone https://github.com/gbm-dev/oob-console-hub.git
+cd oob-console-hub
+cp .env.example .env
 ```
 
 Edit credentials and sites:
@@ -23,8 +23,7 @@ Build and start:
 
 ```bash
 docker compose build
-sudo systemctl start oob-hub
-sudo systemctl start oob-watchdog.timer
+docker compose up -d
 ```
 
 ## Updating
@@ -68,22 +67,15 @@ The phone number is the PSTN line connected to the modem/console server at the r
 
 ## User Management
 
-Run from the host (wrapper delegates to container):
-
-```bash
-oob-user-manage add first.last       # Create user (prints temp password)
-oob-user-manage list                  # Show all users + status
-oob-user-manage reset first.last      # New temp password
-oob-user-manage lock first.last       # Disable account
-oob-user-manage unlock first.last     # Re-enable account
-oob-user-manage remove first.last     # Delete account
-```
-
-Or directly inside the container:
+Run inside the container:
 
 ```bash
 docker exec oob-console-hub oob-manage add first.last
 docker exec oob-console-hub oob-manage list
+docker exec oob-console-hub oob-manage reset first.last
+docker exec oob-console-hub oob-manage lock first.last
+docker exec oob-console-hub oob-manage unlock first.last
+docker exec oob-console-hub oob-manage remove first.last
 ```
 
 Users get a temporary password and must change it on first login. The SSH server drops them directly into the TUI — no shell access.
@@ -99,13 +91,12 @@ Select a site from the menu, auto-dials via modem, live session begins. Press En
 ## Monitoring
 
 ```bash
-systemctl status oob-hub
-systemctl status oob-watchdog.timer
-journalctl -u oob-watchdog -f
+docker ps --filter name=oob-console-hub
+docker logs -f oob-console-hub
 docker exec oob-console-hub oob-healthcheck.sh --verbose
 ```
 
-The watchdog checks health every 2 minutes and auto-restarts on critical failures (max 3/hour).
+Docker runs `oob-healthcheck.sh` every 30 seconds and marks the container healthy/unhealthy.
 
 ## Architecture
 
@@ -115,11 +106,11 @@ Admin SSH (:2222) → Wish/Bubble Tea TUI → /dev/ttySL0 → slmodemd (-e bridg
 
 - **oob-hub**: Go binary — Wish SSH server + Bubble Tea TUI + modem pool + user store
 - **oob-manage**: Go binary — CLI for user management (add/remove/list/lock/unlock/reset)
+- **tini + supervisord**: PID 1 and process supervision for `slmodemd`, Asterisk, and `oob-hub`
 - **slmodemd**: software modem daemon exposing `/dev/ttySL0`
 - **slmodem-asterisk-bridge**: external helper invoked by `slmodemd -e` to relay modem audio via ARI External Media
 - **Asterisk**: PJSIP trunk to Telnyx plus ARI control/media endpoints
 - **User store**: `users.json` with bcrypt hashing, atomic writes, file locking
-- **systemd**: `oob-hub.service` + `oob-watchdog.timer`
 
 ## Development
 

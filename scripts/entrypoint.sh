@@ -1,6 +1,6 @@
 #!/bin/bash
 # OOB Console Hub - Container Entrypoint
-# Generates configs, substitutes env vars, starts telephony, then launches Go SSH server
+# Generates configs, substitutes env vars, performs preflight checks, then launches the supervisor
 
 set -euo pipefail
 
@@ -42,37 +42,10 @@ echo "Telnyx telephony config populated."
 mkdir -p /var/log/oob-sessions
 chmod 1777 /var/log/oob-sessions
 
-# --- Start slmodemd + slmodem-asterisk-bridge ---
+# --- Runtime checks and prep for supervised processes ---
 DEVICE_PATH=${DEVICE_PATH:-/dev/ttySL0}
-
-echo "Starting slmodemd bridge..."
-# Bridge runtime uses ARI_* environment variables for Asterisk control.
-# Limit file descriptors to 1024 to avoid FD_SETSIZE crash in 32-bit slmodemd
-sh -c "ulimit -n 1024; slmodemd -e /usr/local/bin/slmodem-asterisk-bridge" &
-SLMODEM_PID=$!
-echo "  slmodemd bridge started (PID ${SLMODEM_PID})"
-
-# Wait for modem device to appear
-echo "Waiting for ${DEVICE_PATH}..."
-for i in $(seq 1 10); do
-    if [[ -e "${DEVICE_PATH}" ]]; then
-        echo "  ${DEVICE_PATH} - OK"
-        break
-    fi
-    if [ "$i" -eq 10 ]; then
-        echo "  ERROR: ${DEVICE_PATH} did not appear after 10s"
-        exit 1
-    fi
-    sleep 1
-done
-
-# --- Start Asterisk ---
-echo "Starting Asterisk..."
-# Clear old database if it exists to prevent Stasis init failure
-rm -f /var/lib/asterisk/astdb.sqlite3 || true
-
-# Ensure required runtime directories exist
-mkdir -p /var/run/asterisk /var/log/asterisk /var/lib/asterisk /var/spool/asterisk
+echo "Preparing runtime for supervised services..."
+echo "Configured modem device path: ${DEVICE_PATH}"
 
 # Diagnostic: Verify modules directory
 REAL_MOD_DIR=""
@@ -109,37 +82,12 @@ else
     fi
 fi
 
-# Start Asterisk with explicit config path and high verbosity
-# Use -f to stay in foreground (non-daemon), -vvv for verbosity
-# Redirect to startup.log for capturing early failures
-asterisk -f -C /etc/asterisk/asterisk.conf -vvv >/var/log/asterisk/startup.log 2>&1 &
-ASTERISK_PID=$!
+# Clear old database if it exists to prevent Stasis init failure
+rm -f /var/lib/asterisk/astdb.sqlite3 || true
 
-# Wait for Asterisk to be ready
-echo "  Waiting for Asterisk to initialize..."
-for i in $(seq 1 10); do
-    if kill -0 $ASTERISK_PID 2>/dev/null; then
-        if asterisk -rx "core show version" &>/dev/null; then
-            echo "  Asterisk initialized successfully."
-            break
-        fi
-    else
-        echo "ERROR: Asterisk process died during startup!"
-        echo "--- Last 50 lines of startup.log ---"
-        tail -n 50 /var/log/asterisk/startup.log
-        echo "------------------------------------"
-        exit 1
-    fi
-    sleep 1
-    if [ "$i" -eq 10 ]; then
-        echo "WARNING: Asterisk process still starting after 10s..."
-    fi
-done
+# Ensure required runtime directories exist
+mkdir -p /var/run/asterisk /var/log/asterisk /var/lib/asterisk /var/spool/asterisk
 
-# --- Start Go SSH server (replaces sshd) ---
-echo "=== OOB Console Hub Ready ==="
-echo "SSH server listening on ${SSH_ADDRESS:-}:${SSH_PORT:-2222}"
-echo "Modem device: ${DEVICE_PATH}"
-echo "Manage users with: docker exec oob-console-hub oob-manage <command>"
-
-exec /usr/local/bin/oob-hub
+echo "=== OOB Console Hub Init Complete ==="
+echo "Launching process supervisor..."
+exec "$@"
