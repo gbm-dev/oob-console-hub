@@ -76,8 +76,12 @@ RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-cu
         --enable res_http_websocket \
         --enable res_ari \
         --enable res_ari_model \
+        --enable res_ari_events \
+        --enable res_ari_applications \
         --enable res_ari_bridges \
         --enable res_ari_channels \
+        --enable res_ari_playbacks \
+        --enable res_ari_recordings \
         --enable res_stasis \
         --enable res_stasis_device_state \
         --enable res_stasis_playback \
