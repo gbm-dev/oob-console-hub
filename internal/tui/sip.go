@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
@@ -45,13 +46,19 @@ func checkSIPStatus() tea.Msg {
 	}
 
 	// 2. Check slmodemd is configured to use the external bridge helper.
-	if out, err := exec.Command("pgrep", "-fa", "slmodemd").CombinedOutput(); err == nil &&
+	// Use a 2s timeout for pgrep
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, "pgrep", "-fa", "slmodemd").CombinedOutput(); err == nil &&
 		strings.Contains(string(out), "slmodem-asterisk-bridge") {
 		info.BridgeReady = true
 	}
 
 	// 3. Check Asterisk SIP Registration
-	out, err := exec.Command("asterisk", "-rx", "pjsip show registrations").CombinedOutput()
+	// Use a 2s timeout for asterisk CLI
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel2()
+	out, err := exec.CommandContext(ctx2, "asterisk", "-rx", "pjsip show registrations").CombinedOutput()
 	if err == nil {
 		parsed := parseSIPRegistrations(string(out))
 		info.Status = parsed.Status
@@ -116,9 +123,9 @@ func parseSIPRegistrations(output string) SIPInfo {
 // sipTickMsg triggers periodic SIP status checks.
 type sipTickMsg struct{}
 
-// sipTick returns a command that ticks every 30 seconds.
+// sipTick returns a command that ticks every 5 seconds.
 func sipTick() tea.Cmd {
-	return tea.Tick(30*time.Second, func(time.Time) tea.Msg {
+	return tea.Tick(5*time.Second, func(time.Time) tea.Msg {
 		return sipTickMsg{}
 	})
 }
