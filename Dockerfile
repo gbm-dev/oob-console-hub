@@ -80,7 +80,7 @@ RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-cu
         --enable res_stasis_playback \
         --enable res_stasis_recording \
         --enable app_stasis \
-        --enable app_externalMedia \
+        --enable app_external_media \
         --enable bridge_holding \
         --enable chan_pjsip \
         --enable res_rtp_asterisk \
