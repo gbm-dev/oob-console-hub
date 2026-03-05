@@ -14,6 +14,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install Asterisk 22 build dependencies and minimal utilities
 RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    bison \
+    flex \
+    libxml2-utils \
     wget \
     tini \
     supervisor \
@@ -46,7 +49,7 @@ RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-cu
         --with-pjproject-bundled \
         --with-libcurl \
         --with-libxml2 \
-        --with-xslt \
+        --with-libxslt \
     && make menuselect.makeopts \
     && ./menuselect/menuselect --disable-all menuselect.makeopts \
     && ./menuselect/menuselect \
@@ -80,9 +83,10 @@ RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-cu
         --enable res_stasis_playback \
         --enable res_stasis_recording \
         --enable app_stasis \
-        --enable app_external_media \
         --enable bridge_holding \
         --enable chan_pjsip \
+        --enable chan_rtp \
+        --enable chan_websocket \
         --enable res_rtp_asterisk \
         --enable res_sorcery_config \
         --enable res_sorcery_memory \
