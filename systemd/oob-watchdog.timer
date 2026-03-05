@@ -1,0 +1,12 @@
+[Unit]
+Description=OOB Console Hub Watchdog Timer
+After=oob-hub.service
+
+[Timer]
+# Run 60s after boot, then every 2 minutes
+OnBootSec=60
+OnUnitActiveSec=120
+AccuracySec=10
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+.env
+logs/*
+!logs/.gitkeep
+PLAN.md
+bin/d-modem
+bin/slmodemd

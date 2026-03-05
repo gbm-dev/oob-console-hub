@@ -1,0 +1,23 @@
+services:
+  oob-hub:
+    build:
+      context: .
+      network: host
+    container_name: oob-console-hub
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Host networking eliminates SIP NAT issues
+    network_mode: host
+    volumes:
+      # Session logs persist on host
+      - ./logs:/var/log/oob-sessions
+      # Site config can be edited without rebuild
+      - ./config/oob-sites.conf:/etc/oob-sites.conf:ro
+      # User accounts persist across container rebuilds
+      - oob-userdata:/data/users
+    cap_add:
+      - SYS_ADMIN
+
+volumes:
+  oob-userdata:
