@@ -17,7 +17,11 @@ import (
 const dialTimeout = 125 * time.Second
 const resetTimeout = 5 * time.Second
 const maxRetries = 3
-const retryDelay = 2 * time.Second
+
+// retrySettleDelay is a brief pause after the bridge exits and before
+// reopening the modem. Gives slmodemd time to fully reset its internal
+// state after the previous bridge child terminates.
+const retrySettleDelay = 1 * time.Second
 
 // DialingModel shows connection progress with a spinner.
 type DialingModel struct {
@@ -134,9 +138,12 @@ func retryable(r modem.DialResult) bool {
 
 // acquireAndDial runs the modem acquire → reset → configure → dial sequence
 // with automatic retries on transient failures (NO CARRIER, TIMEOUT).
+//
+// Between retries, waits for the slmodem-asterisk-bridge process to exit.
+// Without this wait, slmodemd reuses the stale bridge from the previous
+// attempt and the modem gets immediate NO CARRIER.
 func (m DialingModel) acquireAndDial() tea.Cmd {
 	return func() tea.Msg {
-		// Step 1: Acquire device
 		dev, err := m.lock.Acquire(m.site.Name)
 		if err != nil {
 			return ErrorMsg{Err: fmt.Errorf("modem busy: %w", err), Context: "acquire"}
@@ -145,56 +152,49 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 		var lastResp modem.DialResponse
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			if attempt > 1 {
-				time.Sleep(retryDelay)
-			}
-
-			// Open device
-			mdm, err := modem.Open(dev)
-			if err != nil {
-				m.lock.Release()
-				return ErrorMsg{Err: fmt.Errorf("failed to open %s: %w", dev, err), Context: "open"}
-			}
-
-			// Initialize modem (ATE0 + ATZ)
-			if err := mdm.Init(resetTimeout); err != nil {
-				mdm.Close()
-				m.lock.Release()
-				return ErrorMsg{Err: fmt.Errorf("modem init failed: %w", err), Context: "init"}
-			}
-
-			// Send pre-dial configuration commands if any
-			if len(m.site.ModemInit) > 0 {
-				if err := mdm.Configure(m.site.ModemInit, resetTimeout); err != nil {
-					mdm.Close()
+				// Wait for the bridge process from the previous attempt to
+				// fully exit. The bridge needs time to tear down the Asterisk
+				// call and media WebSocket. Retrying before it exits causes
+				// slmodemd to reuse the stale bridge → immediate NO CARRIER.
+				if err := waitBridgeExit(); err != nil {
+					slog.Error("bridge cleanup failed before retry",
+						"err", err, "attempt", attempt)
 					m.lock.Release()
-					return ErrorMsg{Err: fmt.Errorf("modem configure failed: %w", err), Context: "configure"}
+					return ErrorMsg{
+						Err:     fmt.Errorf("bridge cleanup: %w", err),
+						Context: "bridge",
+					}
 				}
+				// Brief pause for slmodemd to fully reset after the bridge
+				// child terminates.
+				time.Sleep(retrySettleDelay)
 			}
 
-			// Dial
-			resp, err := mdm.Dial(m.site.Phone, dialTimeout)
+			mdm, resp, err := dialAttempt(dev, m.site)
 			if err != nil {
-				mdm.Hangup()
-				mdm.Close()
 				m.lock.Release()
-				return ErrorMsg{Err: fmt.Errorf("dial error: %w", err), Context: "dial"}
+				return ErrorMsg{Err: err, Context: "dial"}
 			}
 
 			if resp.Result == modem.ResultConnect {
-				return DialResultMsg{Result: resp.Result, Transcript: resp.Transcript, Modem: mdm, Device: dev}
+				return DialResultMsg{
+					Result: resp.Result, Transcript: resp.Transcript,
+					Modem: mdm, Device: dev,
+				}
 			}
 
+			// Dial completed but didn't connect. Clean up before retry.
 			lastResp = resp
-			slog.Info("dial failed, checking retry", "result", resp.Result, "attempt", attempt, "max", maxRetries)
-
-			// Clean up before potential retry
+			slog.Info("dial failed, checking retry",
+				"result", resp.Result, "attempt", attempt, "max", maxRetries)
 			mdm.Hangup()
 			mdm.Close()
 
-			// Non-retryable results: fail immediately
 			if !retryable(resp.Result) {
 				m.lock.Release()
-				return DialResultMsg{Result: resp.Result, Transcript: resp.Transcript, Device: dev}
+				return DialResultMsg{
+					Result: resp.Result, Transcript: resp.Transcript, Device: dev,
+				}
 			}
 
 			if attempt < maxRetries {
@@ -202,8 +202,42 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 			}
 		}
 
-		// All retries exhausted
+		// All retries exhausted.
 		m.lock.Release()
-		return DialResultMsg{Result: lastResp.Result, Transcript: lastResp.Transcript, Device: dev}
+		return DialResultMsg{
+			Result: lastResp.Result, Transcript: lastResp.Transcript, Device: dev,
+		}
 	}
+}
+
+// dialAttempt performs a single open → init → configure → dial cycle.
+// On success (any dial result including NO CARRIER), returns the modem and
+// response. The caller must hangup and close the modem when done.
+// On error (device open, init, or IO failure), returns nil modem and error.
+func dialAttempt(dev string, site config.Site) (*modem.Modem, modem.DialResponse, error) {
+	mdm, err := modem.Open(dev)
+	if err != nil {
+		return nil, modem.DialResponse{}, fmt.Errorf("open %s: %w", dev, err)
+	}
+
+	if err := mdm.Init(resetTimeout); err != nil {
+		mdm.Close()
+		return nil, modem.DialResponse{}, fmt.Errorf("modem init: %w", err)
+	}
+
+	if len(site.ModemInit) > 0 {
+		if err := mdm.Configure(site.ModemInit, resetTimeout); err != nil {
+			mdm.Close()
+			return nil, modem.DialResponse{}, fmt.Errorf("modem configure: %w", err)
+		}
+	}
+
+	resp, err := mdm.Dial(site.Phone, dialTimeout)
+	if err != nil {
+		mdm.Hangup()
+		mdm.Close()
+		return nil, modem.DialResponse{}, fmt.Errorf("dial: %w", err)
+	}
+
+	return mdm, resp, nil
 }
