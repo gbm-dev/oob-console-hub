@@ -7,7 +7,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    # Host networking eliminates SIP NAT issues
+    # Host networking eliminates SIP NAT issues and lets the bridge
+    # bind RTP ports directly on the host interface.
     network_mode: host
     volumes:
       # Session logs persist on host

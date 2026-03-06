@@ -13,7 +13,7 @@ import (
 const (
 	// bridgeExitTimeout is the maximum time to wait for the bridge process to
 	// exit after a modem hangup. Must be long enough for the bridge to tear
-	// down the Asterisk call and WebSocket connections gracefully.
+	// down the SIP call and RTP session gracefully.
 	bridgeExitTimeout = 15 * time.Second
 
 	// bridgePollInterval is how often we check whether the bridge has exited.
@@ -44,14 +44,14 @@ const (
 	devicePollIterationsMax = 25
 )
 
-// waitBridgeExit polls until the slmodem-asterisk-bridge child process exits,
+// waitBridgeExit polls until the slmodem-sip-bridge child process exits,
 // then returns nil. If the bridge does not exit within bridgeExitTimeout, it
 // is killed with SIGTERM and we wait bridgeKillGrace for it to die.
 //
 // Why this exists: slmodemd spawns the bridge as an external helper on each
-// ATDT. The bridge creates an Asterisk call and relays media via WebSocket.
+// ATDT. The bridge creates a SIP call and relays media via RTP.
 // When the modem gets NO CARRIER and we hang up, slmodemd does not
-// immediately kill the bridge — the stale bridge keeps the old Asterisk call
+// immediately kill the bridge — the stale bridge keeps the old SIP call
 // alive. If we retry ATDT before the bridge exits, slmodemd cannot set up a
 // clean audio path and the modem gets immediate NO CARRIER.
 func waitBridgeExit() error {
@@ -89,7 +89,7 @@ func waitBridgeExit() error {
 	return nil
 }
 
-// bridgeProcessRunning returns true if a slmodem-asterisk-bridge child process
+// bridgeProcessRunning returns true if a slmodem-sip-bridge child process
 // is currently running. Distinguishes the bridge child from the slmodemd
 // parent, which also contains the bridge binary path in its command line.
 func bridgeProcessRunning() bool {
@@ -97,7 +97,7 @@ func bridgeProcessRunning() bool {
 	defer cancel()
 
 	out, err := exec.CommandContext(
-		ctx, "pgrep", "-fa", "slmodem-asterisk-bridge",
+		ctx, "pgrep", "-fa", "slmodem-sip-bridge",
 	).CombinedOutput()
 	if err != nil {
 		return false // pgrep returns non-zero when no processes match.
@@ -111,8 +111,8 @@ func bridgeProcessRunning() bool {
 //
 // pgrep -fa output format: "PID COMMAND_LINE"
 //
-//	slmodemd line: "100 slmodemd -e /usr/local/bin/slmodem-asterisk-bridge"
-//	bridge line:   "212 /usr/local/bin/slmodem-asterisk-bridge --arg ..."
+//	slmodemd line: "100 slmodemd -e /usr/local/bin/slmodem-sip-bridge"
+//	bridge line:   "212 /usr/local/bin/slmodem-sip-bridge --arg ..."
 //
 // The slmodemd parent always has "slmodemd" in its command line; the bridge
 // child does not. We use this to distinguish them.
@@ -122,7 +122,7 @@ func parseBridgeRunning(pgrepOutput string) bool {
 		if line == "" {
 			continue
 		}
-		hasBridge := strings.Contains(line, "slmodem-asterisk-bridge")
+		hasBridge := strings.Contains(line, "slmodem-sip-bridge")
 		hasSlmodemd := strings.Contains(line, "slmodemd")
 		if hasBridge && !hasSlmodemd {
 			return true
@@ -168,7 +168,7 @@ func killBridgeProcess() {
 	defer cancel()
 
 	out, err := exec.CommandContext(
-		ctx, "pgrep", "-fa", "slmodem-asterisk-bridge",
+		ctx, "pgrep", "-fa", "slmodem-sip-bridge",
 	).CombinedOutput()
 	if err != nil {
 		return // No matching processes.

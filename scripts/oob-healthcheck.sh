@@ -43,27 +43,23 @@ check "oob-hub running" critical \
 check "SSH listening on 2222" critical \
     bash -c 'echo | timeout 5 bash -c "cat < /dev/tcp/127.0.0.1/2222" 2>/dev/null; [[ $? -ne 1 ]]'
 
-# 3. Asterisk running
-check "Asterisk running" critical \
-    asterisk -rx "core show version"
-
-# 4. slmodemd daemon running
+# 3. slmodemd daemon running
 check "slmodemd running" critical \
     pgrep -x slmodemd
 
-# 5. slmodemd modem device present
+# 4. slmodemd modem device present
 check "Modem device present (${DEVICE_PATH})" critical \
     test -e "${DEVICE_PATH}"
 
 # --- Warning checks (alert but don't restart) ---
 
-# 6. Telnyx SIP trunk registered
-check "Telnyx trunk registered" warning \
-    bash -c 'asterisk -rx "pjsip show registrations" 2>/dev/null | grep -qi "registered"'
-
-# 7. slmodemd configured to launch external bridge helper
+# 5. slmodemd configured to launch external bridge helper
 check "slmodemd helper configured" warning \
-    bash -c 'pgrep -fa slmodemd 2>/dev/null | grep -q "slmodem-asterisk-bridge"'
+    bash -c 'pgrep -fa slmodemd 2>/dev/null | grep -q "slmodem-sip-bridge"'
+
+# 6. SIP credentials configured
+check "SIP credentials configured" warning \
+    bash -c '[[ -n "${TELNYX_SIP_USER:-}" && -n "${TELNYX_SIP_PASS:-}" ]]'
 
 # --- Output ---
 if $VERBOSE; then

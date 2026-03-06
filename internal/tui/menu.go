@@ -152,18 +152,18 @@ func (m MenuModel) View() string {
 		parts = append(parts, m.theme.ErrorStyle.Render("● SLMODEMD DOWN"))
 	}
 
-	// 2. slmodem-asterisk-bridge health
+	// 2. slmodem-sip-bridge health
 	if m.sipInfo.BridgeReady {
 		parts = append(parts, m.theme.SuccessStyle.Render("● BRIDGE"))
 	} else {
 		parts = append(parts, m.theme.ErrorStyle.Render("● BRIDGE DOWN"))
 	}
 
-	// 3. Telnyx health
-	if m.sipInfo.Status == SIPRegistered {
-		parts = append(parts, m.theme.SuccessStyle.Render("● TELNYX"))
+	// 3. SIP configuration health
+	if m.sipInfo.Status == SIPConfigured {
+		parts = append(parts, m.theme.SuccessStyle.Render("● SIP"))
 	} else {
-		parts = append(parts, m.theme.ErrorStyle.Render("● TELNYX DOWN"))
+		parts = append(parts, m.theme.ErrorStyle.Render("● SIP DOWN"))
 	}
 
 	// User info
