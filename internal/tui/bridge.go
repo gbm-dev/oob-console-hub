@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -29,6 +30,18 @@ const (
 	// At 500ms intervals over 15s, this is 30 — but we assert it explicitly
 	// to satisfy the "put a limit on everything" rule.
 	bridgePollIterationsMax = 40
+
+	// deviceReadyTimeout is how long to wait for the modem device to
+	// reappear after a bridge kill. Killing the bridge can crash slmodemd
+	// (broken pipe on its child socket), causing supervisor to respawn it.
+	// The PTY at /dev/ttySL0 is destroyed and recreated during respawn.
+	deviceReadyTimeout = 10 * time.Second
+
+	// devicePollInterval is how often we check for the device file.
+	devicePollInterval = 500 * time.Millisecond
+
+	// devicePollIterationsMax bounds the device readiness loop.
+	devicePollIterationsMax = 25
 )
 
 // waitBridgeExit polls until the slmodem-asterisk-bridge child process exits,
@@ -116,6 +129,36 @@ func parseBridgeRunning(pgrepOutput string) bool {
 		}
 	}
 	return false
+}
+
+// waitDeviceReady polls until the modem device file exists, returning nil
+// when it does. This handles the case where killing the bridge crashes
+// slmodemd (broken pipe on its child socket), which destroys the PTY.
+// Supervisor respawns slmodemd, which recreates /dev/ttySL0.
+//
+// If the device already exists, returns immediately.
+func waitDeviceReady(devicePath string) error {
+	if _, err := os.Stat(devicePath); err == nil {
+		return nil // Device exists, no wait needed.
+	}
+
+	slog.Info("modem device missing, waiting for slmodemd respawn",
+		"device", devicePath)
+	deadline := time.Now().Add(deviceReadyTimeout)
+
+	for i := 0; i < devicePollIterationsMax; i++ {
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(devicePollInterval)
+		if _, err := os.Stat(devicePath); err == nil {
+			slog.Info("modem device reappeared after slmodemd respawn",
+				"device", devicePath, "waited_iterations", i+1)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("modem device %s did not reappear within %s", devicePath, deviceReadyTimeout)
 }
 
 // killBridgeProcess sends SIGTERM to bridge child processes, carefully

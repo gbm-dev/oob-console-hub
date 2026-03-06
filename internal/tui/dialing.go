@@ -165,8 +165,20 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 						Context: "bridge",
 					}
 				}
-				// Brief pause for slmodemd to fully reset after the bridge
-				// child terminates.
+				// Killing the bridge can crash slmodemd (broken pipe on
+				// its child socket). Supervisor respawns it, but the PTY
+				// at /dev/ttySL0 is destroyed and recreated. Wait for it.
+				if err := waitDeviceReady(dev); err != nil {
+					slog.Error("device did not recover after bridge cleanup",
+						"err", err, "device", dev, "attempt", attempt)
+					m.lock.Release()
+					return ErrorMsg{
+						Err:     fmt.Errorf("device recovery: %w", err),
+						Context: "device",
+					}
+				}
+				// Brief pause for slmodemd to finish initialization after
+				// the device reappears.
 				time.Sleep(retrySettleDelay)
 			}
 
