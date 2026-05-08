@@ -13,7 +13,7 @@ import (
 const (
 	// bridgeExitTimeout is the maximum time to wait for the bridge process to
 	// exit after a modem hangup. Must be long enough for the bridge to tear
-	// down the Asterisk call and WebSocket connections gracefully.
+	// down its SIP/RTP call to Telnyx gracefully.
 	bridgeExitTimeout = 15 * time.Second
 
 	// bridgePollInterval is how often we check whether the bridge has exited.
@@ -49,11 +49,11 @@ const (
 // is killed with SIGTERM and we wait bridgeKillGrace for it to die.
 //
 // Why this exists: slmodemd spawns the bridge as an external helper on each
-// ATDT. The bridge creates an Asterisk call and relays media via WebSocket.
-// When the modem gets NO CARRIER and we hang up, slmodemd does not
-// immediately kill the bridge — the stale bridge keeps the old Asterisk call
-// alive. If we retry ATDT before the bridge exits, slmodemd cannot set up a
-// clean audio path and the modem gets immediate NO CARRIER.
+// ATDT. The bridge places a direct SIP/RTP call to Telnyx and relays modem
+// audio over RTP. When the modem gets NO CARRIER and we hang up, slmodemd
+// does not immediately kill the bridge — the stale bridge keeps the old
+// SIP dialog alive. If we retry ATDT before the bridge exits, slmodemd
+// cannot set up a clean audio path and the modem gets immediate NO CARRIER.
 func waitBridgeExit() error {
 	if !bridgeProcessRunning() {
 		return nil // Already gone, no wait needed.

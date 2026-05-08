@@ -11,9 +11,9 @@ import (
 	"github.com/gbm-dev/oob-console-hub/internal/modem"
 )
 
-// Keep this slightly above Asterisk's Dial() timeout (120s in extensions.conf)
-// so we can receive final modem result codes like NO CARRIER instead of a
-// premature local TIMEOUT.
+// Keep this slightly above the bridge's SIP_INVITE_TIMEOUT_SECS (default 60s,
+// or whatever Telnyx call setup + ringing budget is) so we can receive final
+// modem result codes like NO CARRIER instead of a premature local TIMEOUT.
 const dialTimeout = 125 * time.Second
 const resetTimeout = 5 * time.Second
 const maxRetries = 3
@@ -153,9 +153,10 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			if attempt > 1 {
 				// Wait for the bridge process from the previous attempt to
-				// fully exit. The bridge needs time to tear down the Asterisk
-				// call and media WebSocket. Retrying before it exits causes
-				// slmodemd to reuse the stale bridge → immediate NO CARRIER.
+				// fully exit. The bridge needs time to tear down the SIP
+				// dialog and RTP session with Telnyx. Retrying before it
+				// exits causes slmodemd to reuse the stale bridge → immediate
+				// NO CARRIER.
 				if err := waitBridgeExit(); err != nil {
 					slog.Error("bridge cleanup failed before retry",
 						"err", err, "attempt", attempt)
