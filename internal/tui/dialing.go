@@ -139,7 +139,7 @@ func retryable(r modem.DialResult) bool {
 // acquireAndDial runs the modem acquire → reset → configure → dial sequence
 // with automatic retries on transient failures (NO CARRIER, TIMEOUT).
 //
-// Between retries, waits for the slmodem-asterisk-bridge process to exit.
+// Between retries, waits for the slmodem-sip-bridge process to exit.
 // Without this wait, slmodemd reuses the stale bridge from the previous
 // attempt and the modem gets immediate NO CARRIER.
 func (m DialingModel) acquireAndDial() tea.Cmd {

@@ -15,22 +15,22 @@ func TestParseBridgeRunning(t *testing.T) {
 		},
 		{
 			name:   "only slmodemd parent running",
-			output: "100 slmodemd -e /usr/local/bin/slmodem-asterisk-bridge\n",
+			output: "100 slmodemd -e /usr/local/bin/slmodem-sip-bridge\n",
 			want:   false,
 		},
 		{
 			name:   "bridge child running alongside slmodemd parent",
-			output: "100 slmodemd -e /usr/local/bin/slmodem-asterisk-bridge\n212 /usr/local/bin/slmodem-asterisk-bridge\n",
+			output: "100 slmodemd -e /usr/local/bin/slmodem-sip-bridge\n212 /usr/local/bin/slmodem-sip-bridge\n",
 			want:   true,
 		},
 		{
 			name:   "bridge child running without slmodemd in output",
-			output: "212 /usr/local/bin/slmodem-asterisk-bridge\n",
+			output: "212 /usr/local/bin/slmodem-sip-bridge\n",
 			want:   true,
 		},
 		{
 			name:   "bridge child with arguments",
-			output: "100 slmodemd -e /usr/local/bin/slmodem-asterisk-bridge\n212 /usr/local/bin/slmodem-asterisk-bridge --dial 17186945647\n",
+			output: "100 slmodemd -e /usr/local/bin/slmodem-sip-bridge\n212 /usr/local/bin/slmodem-sip-bridge --dial 17186945647\n",
 			want:   true,
 		},
 		{
@@ -45,7 +45,7 @@ func TestParseBridgeRunning(t *testing.T) {
 		},
 		{
 			name:   "bridge with bare binary name",
-			output: "212 slmodem-asterisk-bridge\n",
+			output: "212 slmodem-sip-bridge\n",
 			want:   true,
 		},
 	}

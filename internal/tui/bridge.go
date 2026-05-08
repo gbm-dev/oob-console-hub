@@ -44,7 +44,7 @@ const (
 	devicePollIterationsMax = 25
 )
 
-// waitBridgeExit polls until the slmodem-asterisk-bridge child process exits,
+// waitBridgeExit polls until the slmodem-sip-bridge child process exits,
 // then returns nil. If the bridge does not exit within bridgeExitTimeout, it
 // is killed with SIGTERM and we wait bridgeKillGrace for it to die.
 //
@@ -89,7 +89,7 @@ func waitBridgeExit() error {
 	return nil
 }
 
-// bridgeProcessRunning returns true if a slmodem-asterisk-bridge child process
+// bridgeProcessRunning returns true if a slmodem-sip-bridge child process
 // is currently running. Distinguishes the bridge child from the slmodemd
 // parent, which also contains the bridge binary path in its command line.
 func bridgeProcessRunning() bool {
@@ -97,7 +97,7 @@ func bridgeProcessRunning() bool {
 	defer cancel()
 
 	out, err := exec.CommandContext(
-		ctx, "pgrep", "-fa", "slmodem-asterisk-bridge",
+		ctx, "pgrep", "-fa", "slmodem-sip-bridge",
 	).CombinedOutput()
 	if err != nil {
 		return false // pgrep returns non-zero when no processes match.
@@ -111,8 +111,8 @@ func bridgeProcessRunning() bool {
 //
 // pgrep -fa output format: "PID COMMAND_LINE"
 //
-//	slmodemd line: "100 slmodemd -e /usr/local/bin/slmodem-asterisk-bridge"
-//	bridge line:   "212 /usr/local/bin/slmodem-asterisk-bridge --arg ..."
+//	slmodemd line: "100 slmodemd -e /usr/local/bin/slmodem-sip-bridge"
+//	bridge line:   "212 /usr/local/bin/slmodem-sip-bridge --arg ..."
 //
 // The slmodemd parent always has "slmodemd" in its command line; the bridge
 // child does not. We use this to distinguish them.
@@ -122,7 +122,7 @@ func parseBridgeRunning(pgrepOutput string) bool {
 		if line == "" {
 			continue
 		}
-		hasBridge := strings.Contains(line, "slmodem-asterisk-bridge")
+		hasBridge := strings.Contains(line, "slmodem-sip-bridge")
 		hasSlmodemd := strings.Contains(line, "slmodemd")
 		if hasBridge && !hasSlmodemd {
 			return true
@@ -168,7 +168,7 @@ func killBridgeProcess() {
 	defer cancel()
 
 	out, err := exec.CommandContext(
-		ctx, "pgrep", "-fa", "slmodem-asterisk-bridge",
+		ctx, "pgrep", "-fa", "slmodem-sip-bridge",
 	).CombinedOutput()
 	if err != nil {
 		return // No matching processes.
