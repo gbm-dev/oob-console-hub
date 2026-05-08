@@ -26,7 +26,7 @@ type SIPInfo struct {
 	Server      string // e.g. "sip.telnyx.com"
 	Expiry      string // e.g. "3434s"
 	ModemReady  bool   // /dev/ttySL0 exists
-	BridgeReady bool   // slmodem-asterisk-bridge process running
+	BridgeReady bool   // slmodem-sip-bridge process running
 }
 
 // sipStatusMsg carries the result of a SIP registration check.
@@ -50,7 +50,7 @@ func checkSIPStatus() tea.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if out, err := exec.CommandContext(ctx, "pgrep", "-fa", "slmodemd").CombinedOutput(); err == nil &&
-		strings.Contains(string(out), "slmodem-asterisk-bridge") {
+		strings.Contains(string(out), "slmodem-sip-bridge") {
 		info.BridgeReady = true
 	}
 

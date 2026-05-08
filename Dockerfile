@@ -14,6 +14,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install Asterisk 22 build dependencies and minimal utilities
 RUN dpkg --add-architecture i386 && apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    autoconf \
+    automake \
+    libtool \
+    m4 \
     bison \
     flex \
     libxml2-utils \
@@ -45,7 +49,7 @@ RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-cu
     && cd asterisk-22.*/ \
     && (yes | DEBIAN_FRONTEND=noninteractive ./contrib/scripts/install_prereq install || true) \
     && ./configure --prefix=/usr \
-        --with-jansson-bundled \
+        --with-jansson \
         --with-pjproject-bundled \
         --with-libcurl \
         --with-libxml2 \
@@ -112,15 +116,15 @@ RUN wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-cu
     && make install \
     && cd .. && rm -rf asterisk-22.*/
 
-# Install prebuilt slmodemd + slmodem-asterisk-bridge binaries (latest release)
+# Install prebuilt slmodemd + slmodem-sip-bridge binaries (latest release)
 # ADD checksums API responses; cache busts when a new release is published.
 ADD https://api.github.com/repos/gbm-dev/slmodemd/releases/latest /tmp/slmodemd-release.json
-ADD https://api.github.com/repos/gbm-dev/slmodem-asterisk-bridge/releases/latest /tmp/bridge-release.json
+ADD https://api.github.com/repos/gbm-dev/slmodem-sip-bridge/releases/latest /tmp/bridge-release.json
 RUN wget -O /usr/local/bin/slmodemd \
         "https://github.com/gbm-dev/slmodemd/releases/latest/download/slmodemd-linux-i386" \
-    && wget -O /usr/local/bin/slmodem-asterisk-bridge \
-        "https://github.com/gbm-dev/slmodem-asterisk-bridge/releases/latest/download/slmodem-asterisk-bridge-linux-x86_64" \
-    && chmod +x /usr/local/bin/slmodemd /usr/local/bin/slmodem-asterisk-bridge
+    && wget -O /usr/local/bin/slmodem-sip-bridge \
+        "https://github.com/gbm-dev/slmodem-sip-bridge/releases/latest/download/slmodem-sip-bridge-linux-x86_64" \
+    && chmod +x /usr/local/bin/slmodemd /usr/local/bin/slmodem-sip-bridge
 
 # Copy Go binaries from builder
 COPY --from=go-builder /usr/local/bin/oob-hub /usr/local/bin/oob-hub

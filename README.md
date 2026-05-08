@@ -101,15 +101,15 @@ Docker runs `oob-healthcheck.sh` every 30 seconds and marks the container health
 ## Architecture
 
 ```
-Admin SSH (:2222) → Wish/Bubble Tea TUI → /dev/ttySL0 → slmodemd (-e bridge) → Asterisk ARI/ExternalMedia → Telnyx SIP → PSTN → Remote Device
+Admin SSH (:2222) → Wish/Bubble Tea TUI → /dev/ttySL0 → slmodemd (-e bridge) → direct SIP/RTP → Telnyx SIP → PSTN → Remote Device
 ```
 
 - **oob-hub**: Go binary — Wish SSH server + Bubble Tea TUI + modem pool + user store
 - **oob-manage**: Go binary — CLI for user management (add/remove/list/lock/unlock/reset)
 - **tini + supervisord**: PID 1 and process supervision for `slmodemd`, Asterisk, and `oob-hub`
 - **slmodemd**: software modem daemon exposing `/dev/ttySL0`
-- **slmodem-asterisk-bridge**: external helper invoked by `slmodemd -e` to relay modem audio via ARI External Media
-- **Asterisk**: PJSIP trunk to Telnyx plus ARI control/media endpoints
+- **slmodem-sip-bridge**: external helper invoked by `slmodemd -e` that opens a direct SIP/RTP call to Telnyx and relays modem audio
+- **Asterisk**: PJSIP trunk for SIP registration / signaling to Telnyx
 - **User store**: `users.json` with bcrypt hashing, atomic writes, file locking
 
 ## Development

@@ -63,7 +63,7 @@ check "Telnyx trunk registered" warning \
 
 # 7. slmodemd configured to launch external bridge helper
 check "slmodemd helper configured" warning \
-    bash -c 'pgrep -fa slmodemd 2>/dev/null | grep -q "slmodem-asterisk-bridge"'
+    bash -c 'pgrep -fa slmodemd 2>/dev/null | grep -q "slmodem-sip-bridge"'
 
 # --- Output ---
 if $VERBOSE; then

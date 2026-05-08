@@ -152,7 +152,7 @@ func (m MenuModel) View() string {
 		parts = append(parts, m.theme.ErrorStyle.Render("● SLMODEMD DOWN"))
 	}
 
-	// 2. slmodem-asterisk-bridge health
+	// 2. slmodem-sip-bridge health
 	if m.sipInfo.BridgeReady {
 		parts = append(parts, m.theme.SuccessStyle.Render("● BRIDGE"))
 	} else {
