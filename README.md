@@ -1,6 +1,6 @@
 # POTS - OOB Console Hub
 
-Dockerized out-of-band console access over PSTN. Admins SSH in, pick a site from a modern TUI menu, and get dropped into a live modem session routed through Asterisk + Telnyx SIP.
+Dockerized out-of-band console access over PSTN. Admins SSH in, pick a site from a modern TUI menu, and get dropped into a live modem session routed through Telnyx SIP via direct SIP/RTP.
 
 Built with Go using the [Charm](https://charm.sh) ecosystem (Wish + Bubble Tea + Lip Gloss) for a single-binary SSH server with native modem handling and built-in user management.
 
@@ -106,10 +106,9 @@ Admin SSH (:2222) → Wish/Bubble Tea TUI → /dev/ttySL0 → slmodemd (-e bridg
 
 - **oob-hub**: Go binary — Wish SSH server + Bubble Tea TUI + modem pool + user store
 - **oob-manage**: Go binary — CLI for user management (add/remove/list/lock/unlock/reset)
-- **tini + supervisord**: PID 1 and process supervision for `slmodemd`, Asterisk, and `oob-hub`
+- **tini + supervisord**: PID 1 and process supervision for `slmodemd` and `oob-hub`
 - **slmodemd**: software modem daemon exposing `/dev/ttySL0`
-- **slmodem-sip-bridge**: external helper invoked by `slmodemd -e` that opens a direct SIP/RTP call to Telnyx and relays modem audio
-- **Asterisk**: PJSIP trunk for SIP registration / signaling to Telnyx
+- **slmodem-sip-bridge**: external helper invoked by `slmodemd -e` that opens a direct SIP/RTP call to Telnyx and relays modem audio (no Asterisk in the media path)
 - **User store**: `users.json` with bcrypt hashing, atomic writes, file locking
 
 ## Development

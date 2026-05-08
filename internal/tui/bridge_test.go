@@ -35,7 +35,7 @@ func TestParseBridgeRunning(t *testing.T) {
 		},
 		{
 			name:   "unrelated processes only",
-			output: "300 some-other-process\n400 asterisk -f\n",
+			output: "300 some-other-process\n400 supervisord\n",
 			want:   false,
 		},
 		{
