@@ -35,6 +35,7 @@ type DialingModel struct {
 	done       bool
 	lock       *modem.DeviceLock
 	theme      Theme
+	statusCh   chan string
 }
 
 // NewDialingModel creates a dialing view for the given site.
@@ -43,16 +44,36 @@ func NewDialingModel(site config.Site, lock *modem.DeviceLock, theme Theme) Dial
 	s.Spinner = spinner.Dot
 	s.Style = theme.WarningStyle
 	return DialingModel{
-		spinner: s,
-		site:    site,
-		status:  "Acquiring modem...",
-		lock:    lock,
-		theme:   theme,
+		spinner:  s,
+		site:     site,
+		status:   "Acquiring modem...",
+		lock:     lock,
+		theme:    theme,
+		statusCh: make(chan string, 16),
 	}
 }
 
 func (m DialingModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.acquireAndDial())
+	return tea.Batch(m.spinner.Tick, m.acquireAndDial(), m.waitStatus())
+}
+
+// waitStatus blocks on the status channel and re-arms itself in Update so
+// the dialing goroutine can stream progress updates back to the TUI.
+func (m DialingModel) waitStatus() tea.Cmd {
+	return func() tea.Msg {
+		s, ok := <-m.statusCh
+		if !ok {
+			return nil
+		}
+		return statusMsg(s)
+	}
+}
+
+func (m DialingModel) sendStatus(s string) {
+	select {
+	case m.statusCh <- s:
+	default:
+	}
 }
 
 func (m DialingModel) Update(msg tea.Msg) (DialingModel, tea.Cmd) {
@@ -64,7 +85,7 @@ func (m DialingModel) Update(msg tea.Msg) (DialingModel, tea.Cmd) {
 
 	case statusMsg:
 		m.status = string(msg)
-		return m, nil
+		return m, m.waitStatus()
 
 	case DialResultMsg:
 		if msg.Result == modem.ResultConnect {
@@ -144,6 +165,9 @@ func retryable(r modem.DialResult) bool {
 // attempt and the modem gets immediate NO CARRIER.
 func (m DialingModel) acquireAndDial() tea.Cmd {
 	return func() tea.Msg {
+		defer close(m.statusCh)
+
+		m.sendStatus("Acquiring modem...")
 		dev, err := m.lock.Acquire(m.site.Name)
 		if err != nil {
 			return ErrorMsg{Err: fmt.Errorf("modem busy: %w", err), Context: "acquire"}
@@ -152,11 +176,7 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 		var lastResp modem.DialResponse
 		for attempt := 1; attempt <= maxRetries; attempt++ {
 			if attempt > 1 {
-				// Wait for the bridge process from the previous attempt to
-				// fully exit. The bridge needs time to tear down the SIP
-				// dialog and RTP session with Telnyx. Retrying before it
-				// exits causes slmodemd to reuse the stale bridge → immediate
-				// NO CARRIER.
+				m.sendStatus(fmt.Sprintf("Waiting for bridge cleanup (retry %d/%d)...", attempt, maxRetries))
 				if err := waitBridgeExit(); err != nil {
 					slog.Error("bridge cleanup failed before retry",
 						"err", err, "attempt", attempt)
@@ -166,9 +186,7 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 						Context: "bridge",
 					}
 				}
-				// Killing the bridge can crash slmodemd (broken pipe on
-				// its child socket). Supervisor respawns it, but the PTY
-				// at /dev/ttySL0 is destroyed and recreated. Wait for it.
+				m.sendStatus(fmt.Sprintf("Waiting for device recovery (retry %d/%d)...", attempt, maxRetries))
 				if err := waitDeviceReady(dev); err != nil {
 					slog.Error("device did not recover after bridge cleanup",
 						"err", err, "device", dev, "attempt", attempt)
@@ -178,12 +196,10 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 						Context: "device",
 					}
 				}
-				// Brief pause for slmodemd to finish initialization after
-				// the device reappears.
 				time.Sleep(retrySettleDelay)
 			}
 
-			mdm, resp, err := dialAttempt(dev, m.site)
+			mdm, resp, err := dialAttempt(dev, m.site, m.sendStatus)
 			if err != nil {
 				m.lock.Release()
 				return ErrorMsg{Err: err, Context: "dial"}
@@ -196,10 +212,10 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 				}
 			}
 
-			// Dial completed but didn't connect. Clean up before retry.
 			lastResp = resp
 			slog.Info("dial failed, checking retry",
 				"result", resp.Result, "attempt", attempt, "max", maxRetries)
+			m.sendStatus(fmt.Sprintf("Dial failed: %s. Hanging up...", resp.Result))
 			mdm.Hangup()
 			mdm.Close()
 
@@ -215,7 +231,6 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 			}
 		}
 
-		// All retries exhausted.
 		m.lock.Release()
 		return DialResultMsg{
 			Result: lastResp.Result, Transcript: lastResp.Transcript, Device: dev,
@@ -227,24 +242,28 @@ func (m DialingModel) acquireAndDial() tea.Cmd {
 // On success (any dial result including NO CARRIER), returns the modem and
 // response. The caller must hangup and close the modem when done.
 // On error (device open, init, or IO failure), returns nil modem and error.
-func dialAttempt(dev string, site config.Site) (*modem.Modem, modem.DialResponse, error) {
+func dialAttempt(dev string, site config.Site, status func(string)) (*modem.Modem, modem.DialResponse, error) {
+	status("Opening modem device...")
 	mdm, err := modem.Open(dev)
 	if err != nil {
 		return nil, modem.DialResponse{}, fmt.Errorf("open %s: %w", dev, err)
 	}
 
+	status("Resetting modem (ATZ)...")
 	if err := mdm.Init(resetTimeout); err != nil {
 		mdm.Close()
 		return nil, modem.DialResponse{}, fmt.Errorf("modem init: %w", err)
 	}
 
 	if len(site.ModemInit) > 0 {
+		status("Applying modem init string...")
 		if err := mdm.Configure(site.ModemInit, resetTimeout); err != nil {
 			mdm.Close()
 			return nil, modem.DialResponse{}, fmt.Errorf("modem configure: %w", err)
 		}
 	}
 
+	status(fmt.Sprintf("Dialing %s...", site.Phone))
 	resp, err := mdm.Dial(site.Phone, dialTimeout)
 	if err != nil {
 		mdm.Hangup()
